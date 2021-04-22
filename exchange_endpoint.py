@@ -208,7 +208,7 @@ def address():
         if 'platform' not in content.keys():
             print( f"Error: no platform provided" )
             return jsonify( "Error: no platform provided" )
-        if not content['platform'] in ["Ethereum", "Algorand"]
+        if not content['platform'] in ["Ethereum", "Algorand"]:
             print( f"Error: {content['platform']} is an invalid platform" )
             return jsonify( f"Error: invalid platform provided: {content['platform']}"  )
         
