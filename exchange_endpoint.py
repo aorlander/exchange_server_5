@@ -86,10 +86,15 @@ def connect_to_blockchains():
         
 """ Helper Methods (skeleton code for you to implement) """
 
-def log_message(message_dict):
-    msg = json.dumps(message_dict)
+def log_message(message):
+    #msg = json.dumps(message_dict)
 
     # TODO: Add message to the Log table
+    time = datetime.now()
+    log = Log(logtime=time, message=message)
+    g.session.add(log)
+    g.session.commit()
+    pass
     
     return
 
@@ -97,26 +102,79 @@ def get_algo_keys():
     
     # TODO: Generate or read (using the mnemonic secret) 
     # the algorand public/private keys
-    
+    mnemonic_secret = "polar taxi broccoli decrease ten decrease illness engine suit useless unit planet eternal abandon click during adapt decide jazz proud evil kingdom century abstract empty"
+    sk = mnemonic.to_private_key(mnemonic_secret)
+    pk = mnemonic.to_public_key(mnemonic_secret)
+        
     return algo_sk, algo_pk
-
 
 def get_eth_keys(filename = "eth_mnemonic.txt"):
     w3 = Web3()
     
     # TODO: Generate or read (using the mnemonic secret) 
     # the ethereum public/private keys
+    w3.eth.account.enable_unaudited_hdwallet_features()
+    acct,mnemonic_secret = w3.eth.account.create_with_mnemonic()
+    acct = w3.eth.account.from_mnemonic(mnemonic_secret)
+    eth_pk = acct._address
+    eth_sk = acct._private_key
 
     return eth_sk, eth_pk
-  
+
+def check_sig(payload,sig):
+    s_pk = payload['sender_pk'] 
+    platform = payload['platform']
+    response = False
+    if platform=='Ethereum':
+        eth_encoded_msg = eth_account.messages.encode_defunct(text=json.dumps(payload))
+        if eth_account.Account.recover_message(eth_encoded_msg,signature=sig) == s_pk:
+            response = True
+    if platform=='Algorand':
+        if algosdk.util.verify_bytes(json.dumps(payload).encode('utf-8'),sig,s_pk):
+            response = True
+    return response
+
+def check_match(tx, order):
+    if(order.filled==None):
+        if(tx.buy_currency == order.sell_currency):
+            if(tx.sell_currency == order.buy_currency):
+                if(tx.sell_amount / tx.buy_amount >= order.buy_amount/order.sell_amount):
+                     return True
+    return False
+
+def match_order(tx, order):  
+    if (tx.sell_amount < order.buy_amount):
+        remaining_buy_amt = order.buy_amount - tx.sell_amount
+        remaining_sell_amt = order.sell_amount - tx.buy_amount
+        derived_order = Order (
+            creator_id=order.id, 
+            sender_pk=order.sender_pk,
+            receiver_pk=order.receiver_pk, 
+            buy_currency=order.buy_currency, 
+            sell_currency=order.sell_currency, 
+            buy_amount=remaining_buy_amt, 
+            sell_amount= remaining_sell_amt)
+        derived_order.timestamp = datetime.now()
+        derived_order.relationship = (derived_order.id, order.id)
+        g.session.add(derived_order)
+        g.session.commit()
+        tx.filled = order.timestamp 
+        order.filled = order.timestamp
+        tx.counterparty_id = order.id
+        order.counterparty_id = tx.id
+    return 0
+
 def fill_order(order, txes=[]):
     # TODO: 
     # Match orders (same as Exchange Server II)
     # Validate the order has a payment to back it (make sure the counterparty also made a payment)
     # Make sure that you end up executing all resulting transactions!
-    
+    for tx in txes:
+        if tx.filled == None:
+            if(check_match(tx, order)==True):
+                match_order(tx, order)
     pass
-  
+
 def execute_txes(txes):
     if txes is None:
         return True
@@ -156,9 +214,13 @@ def address():
         
         if content['platform'] == "Ethereum":
             #Your code here
+            keys = get_eth_keys
+            eth_pk=keys[1]
             return jsonify( eth_pk )
         if content['platform'] == "Algorand":
             #Your code here
+            keys = get_algo_keys()
+            algo_pk=keys[1]
             return jsonify( algo_pk )
 
 @app.route('/trade', methods=['POST'])
@@ -191,24 +253,42 @@ def trade():
         # Your code here
         
         # 1. Check the signature
+        response = check_sig(content['payload'], content['sig'])
         
         # 2. Add the order to the table
-        
         # 3a. Check if the order is backed by a transaction equal to the sell_amount (this is new)
-
         # 3b. Fill the order (as in Exchange Server II) if the order is valid
-        
         # 4. Execute the transactions
-        
         # If all goes well, return jsonify(True). else return jsonify(False)
+
+        if response == True:   # If the signature verifies, store remaining fields in order table.
+            order = Order(sender_pk=content['payload']['sender_pk'] , 
+                          receiver_pk=content['payload']['receiver_pk'], 
+                          buy_currency=content['payload']['buy_currency'], 
+                          sell_currency=content['payload']['sell_currency'], 
+                          buy_amount=content['payload']['buy_amount'], 
+                          sell_amount=content['payload']['sell_amount'])
+            g.session.add(order)
+            g.session.commit()
+            fill_order(order, g.session.query(Order).all())
+            return jsonify(True)
+        if response == False:   # If the signature does not verify, insert a record into log table
+            leg_message(json.dumps(content['payload']))
+            return jsonify(False)
+
+
         return jsonify(True)
 
 @app.route('/order_book')
 def order_book():
-    fields = [ "buy_currency", "sell_currency", "buy_amount", "sell_amount", "signature", "tx_id", "receiver_pk" ]
-    
-    # Same as before
-    pass
+    orders = g.session.query(Order).all()
+    list_orders = []
+    for order in orders:
+        o = {"sender_pk": order.sender_pk, "receiver_pk": order.receiver_pk, 
+            "buy_currency": order.buy_currency, "sell_currency": order.sell_currency, 
+            "buy_amount": order.buy_amount, "sell_amount": order.sell_amount, "signature": order.signature}
+        list_orders.append(o)
+    return jsonify(data=list_orders)
 
 if __name__ == '__main__':
     app.run(port='5002')
