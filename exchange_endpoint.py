@@ -216,7 +216,7 @@ def address():
             #Your code here
             keys = get_eth_keys
             
-            return jsonify( json.dumps(keys) )
+            return jsonify( json.dumps(keys[1]) )
         if content['platform'] == "Algorand":
             #Your code here
             keys = get_algo_keys()
