@@ -215,8 +215,8 @@ def address():
         if content['platform'] == "Ethereum":
             #Your code here
             keys = get_eth_keys
-            
-            return jsonify( json.dumps(keys[1]) )
+            eth_pk=keys[1]
+            return jsonify( eth_pk )
         if content['platform'] == "Algorand":
             #Your code here
             keys = get_algo_keys()
