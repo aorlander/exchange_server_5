@@ -13,7 +13,6 @@ import math
 import sys
 import traceback
 
-# TODO: make sure you implement connect_to_algo, send_tokens_algo, and send_tokens_eth
 from send_tokens import connect_to_algo, connect_to_eth, send_tokens_algo, send_tokens_eth
 
 from models import Base, Order, TX
@@ -110,15 +109,16 @@ def get_algo_keys():
 
 def get_eth_keys(filename = "eth_mnemonic.txt"):
     w3 = Web3()
-    
-    # TODO: Generate or read (using the mnemonic secret) 
-    # the ethereum public/private keys
-    w3.eth.account.enable_unaudited_hdwallet_features()
-    acct,mnemonic_secret = w3.eth.account.create_with_mnemonic()
+    f = open(filename,"r")
+    if error:
+        w3.eth.account.enable_unaudited_hdwallet_features()
+        acct,mnemonic_secret = w3.eth.account.create_with_mnemonic()
+        f = open(filename, "w")
+        f.write(mnemonic_secret)
+    mnemonic_secret = f.read()
     acct = w3.eth.account.from_mnemonic(mnemonic_secret)
     eth_pk = acct._address
     eth_sk = acct._private_key
-
     return eth_sk, eth_pk
 
 def check_sig(payload,sig):
@@ -213,7 +213,6 @@ def address():
             return jsonify( f"Error: invalid platform provided: {content['platform']}"  )
         
         if content['platform'] == "Ethereum":
-            #Your code here
             keys = get_eth_keys
             eth_pk=keys[1]
             return jsonify( eth_pk )
